@@ -1,0 +1,52 @@
+name: Ricky Daily Drive
+on:
+  workflow_dispatch:
+  schedule:
+    # Both UTC hours; the step below selects 05:30 Europe/Amsterdam.
+    - cron: '30 3,4 * * 1-5'
+permissions:
+  contents: write
+concurrency:
+  group: daily-drive
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check local time
+        id: clock
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          local = datetime.now(ZoneInfo('Europe/Amsterdam'))
+          should_run = os.environ['EVENT_NAME'] == 'workflow_dispatch' or (local.weekday() < 5 and local.hour == 5 and local.minute >= 25)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'run={str(should_run).lower()}\n')
+          print('Nederlandse tijd:', local.isoformat(), '| uitvoeren:', should_run)
+          PY
+      - name: Install dependencies
+        if: steps.clock.outputs.run == 'true'
+        run: python -m pip install -r requirements.txt
+      - name: Update playlist
+        if: steps.clock.outputs.run == 'true'
+        env:
+          SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+        run: python ricks_daily_drive_cloud.py
+      - name: Save trivia history
+        if: steps.clock.outputs.run == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f daily_drive_weetjes_historie.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update trivia episode history'
+            git push
+          fi
