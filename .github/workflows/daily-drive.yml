@@ -1,1 +1,88 @@
 
+name: Ricky Daily Drive
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Twee UTC-momenten voor zomer- en wintertijd.
+    # De tijdcontrole hieronder voorkomt een dubbele uitvoering.
+    - cron: '30 3,4 * * 1-5'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ricky-daily-drive
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check Dutch time
+        id: clock
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          now = datetime.now(ZoneInfo('Europe/Amsterdam'))
+          manual = os.environ['EVENT_NAME'] == 'workflow_dispatch'
+
+          should_run = manual or (
+              now.weekday() < 5
+              and now.hour == 5
+              and now.minute >= 25
+          )
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f'run={str(should_run).lower()}\n')
+
+          print('Nederlandse tijd:', now.isoformat())
+          print('Script starten:', should_run)
+          PY
+
+      - name: Install Python dependencies
+        if: steps.clock.outputs.run == 'true'
+        run: python -m pip install -r requirements.txt
+
+      - name: Update Spotify playlist
+        if: steps.clock.outputs.run == 'true'
+        env:
+          SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+        run: python ricks_daily_drive_cloud.py
+
+      - name: Save trivia history if present
+        if: steps.clock.outputs.run == 'true'
+        shell: bash
+        run: |
+          if [ ! -f daily_drive_weetjes_historie.json ]; then
+            echo 'Geen weetjesgeschiedenis aangemaakt; overslaan.'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git add -f -- daily_drive_weetjes_historie.json
+
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update trivia episode history'
+            git push
+          else
+            echo 'Geen wijzigingen in weetjesgeschiedenis.'
+          fi
+
