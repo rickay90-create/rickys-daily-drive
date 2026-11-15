@@ -1,0 +1,17 @@
+# Spotify-inloggegevens
+spotify_token_private.json
+*token*.json
+.env
+.env.*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Tijdelijke testbestanden
+daily_drive_testmix.json
+daily_drive_test_resultaat.json
+
+# Lokale podcastgeschiedenis
+daily_drive_weetjes_historie.json
