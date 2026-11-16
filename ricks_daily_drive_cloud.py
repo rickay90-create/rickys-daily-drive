@@ -24,8 +24,19 @@ def refresh_access_token():
     response = requests.post('https://accounts.spotify.com/api/token', data={
         'grant_type': 'refresh_token', 'refresh_token': refresh, 'client_id': CLIENT_ID,
     }, timeout=30)
-    if not response.ok:
-        raise RuntimeError(f'Spotify tokenvernieuwing mislukt: HTTP {response.status_code}')
+ if not response.ok:
+    try:
+        error_data = response.json()
+    except ValueError:
+        error_data = {}
+
+    error = error_data.get('error', 'onbekend')
+    description = error_data.get('error_description', 'geen verdere informatie')
+
+    raise RuntimeError(
+        f'Spotify tokenvernieuwing mislukt: HTTP {response.status_code} '
+        f'({error}): {description}'
+    )
     data = response.json()
     if data.get('refresh_token') and data['refresh_token'] != refresh:
         # Never print token. Rotation requires updating GitHub secret manually.
