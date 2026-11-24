@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -51,6 +52,38 @@ def save_json(path, data):
     )
 
 
+def save_refresh_token(new_token):
+    if not os.environ.get('GH_TOKEN'):
+        raise RuntimeError(
+            'GitHub Secret GH_SECRET_UPDATER ontbreekt.'
+        )
+
+    repo = os.environ.get('GITHUB_REPOSITORY')
+
+    if not repo:
+        raise RuntimeError('GitHub repository ontbreekt.')
+
+    result = subprocess.run(
+        [
+            'gh', 'secret', 'set',
+            'SPOTIFY_REFRESH_TOKEN',
+            '--repo', repo
+        ],
+        input=new_token,
+        text=True,
+        capture_output=True,
+        timeout=60
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            'Nieuw Spotify-token kon niet worden opgeslagen. '
+            'Controleer GitHub Secrets-rechten.'
+        )
+
+    print('Nieuw Spotify-refresh-token veilig opgeslagen.')
+
+
 def token_from_refresh():
     refresh = os.environ.get(
         'SPOTIFY_REFRESH_TOKEN', ''
@@ -66,7 +99,7 @@ def token_from_refresh():
         data={
             'grant_type': 'refresh_token',
             'refresh_token': refresh,
-            'client_id': base.CLIENT_ID,
+            'client_id': base.CLIENT_ID
         },
         timeout=30
     )
@@ -96,15 +129,15 @@ def token_from_refresh():
         )
 
     data = response.json()
+    new_refresh = data.get('refresh_token')
 
-    if data.get('refresh_token') and data['refresh_token'] != refresh:
-        raise RuntimeError(
-            'Spotify heeft het refresh token vervangen. '
-            'GitHub Secret moet worden bijgewerkt.'
-        )
+    if new_refresh and new_refresh != refresh:
+        save_refresh_token(new_refresh)
+    else:
+        print('Bestaand refresh token blijft geldig.')
 
     if not data.get('access_token'):
-        raise RuntimeError('Spotify gaf geen access token terug.')
+        raise RuntimeError('Geen Spotify access token ontvangen.')
 
     print('Spotify-authenticatie geslaagd.')
     return data['access_token']
