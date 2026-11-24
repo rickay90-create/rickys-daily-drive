@@ -1,3 +1,4 @@
+
 name: Ricky Daily Drive
 
 on:
@@ -32,6 +33,7 @@ jobs:
       - name: Update Spotify playlist
         env:
           SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_SECRET_UPDATER }}
         run: python ricks_daily_drive_cloud.py
 
       - name: Save podcast history
